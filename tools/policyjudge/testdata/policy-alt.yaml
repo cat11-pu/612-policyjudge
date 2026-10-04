@@ -1,0 +1,51 @@
+# 第二份策略：覆盖用户与用户组、动词、资源通配与子资源、命名空间、两级省略阶段
+apiVersion: audit.k8s.io/v1
+kind: Policy
+omitStages:
+  - "ResponseStarted"
+rules:
+  # 1 已认证用户访问非资源路径 /api 前缀与 /version 不记录
+  - level: None
+    userGroups: ["system:authenticated"]
+    nonResourceURLs:
+    - "/api*"
+    - "/version"
+  # 2 调度器对 pod 的读操作只记 Request
+  - level: Request
+    users: ["kube-scheduler"]
+    verbs: ["get"]
+    resources:
+    - group: ""
+      resources: ["pods"]
+  # 3 core 组 pod 与 apps 组 deployment 记全量；本规则额外省略 Panic
+  - level: RequestResponse
+    resources:
+    - group: ""
+      resources: ["pods", "pods/*"]
+    - group: "apps"
+      resources: ["deployments"]
+    omitStages:
+      - "Panic"
+  # 4 认证信息只记元数据
+  - level: Metadata
+    resources:
+    - group: "" # core API group
+      resources: ["secrets", "configmaps"]
+  # 5 删除操作不记录
+  - level: None
+    verbs: ["delete"]
+  # 6 apps 组其余资源不记录（空资源列表匹配整个组）
+  - level: None
+    resources:
+    - group: "apps"
+      resources: []
+  # 7 kube-system 里的资源只记元数据
+  - level: Metadata
+    namespaces: ["kube-system"]
+  # 8 集群级资源的 list 只记元数据
+  - level: Metadata
+    verbs: ["list"]
+    namespaces: [""]
+  # 9 日志类非资源路径记 Request
+  - level: Request
+    nonResourceURLs: ["/logs*"]
